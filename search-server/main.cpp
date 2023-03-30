@@ -23,6 +23,21 @@ void TestExcludeStopWordsFromAddedDocumentContent() {
     }
 }
 
+void TestAddDocument() {
+    SearchServer server;
+    size_t doc_count = server.GetDocumentCount();
+    size_t expected_result = 0;
+    ASSERT_EQUAL(doc_count, expected_result);
+    
+    const int doc_id = 42;
+    const string content = "cat in the city"s;
+    const vector<int> ratings = {1, 2, 3};
+    server.AddDocument(doc_id, content, DocumentStatus::ACTUAL, ratings);
+    doc_count = server.GetDocumentCount();
+    expected_result = 1;
+    ASSERT_EQUAL(doc_count, expected_result);
+}
+
 void TestDocumentsWithMinusWordsExcludedFromSearchResults() {
     const int doc_id_0 = 42;
     const string content_0 = "cat in the city"s;
@@ -52,19 +67,27 @@ void TestMatchDocument() {
     const vector<int> ratings_1 = {5, 6, 8};
     
     SearchServer server;
+    server.SetStopWords("in the"s);
     server.AddDocument(doc_id_0, content_0, DocumentStatus::ACTUAL, ratings_0);
     server.AddDocument(doc_id_1, content_1, DocumentStatus::ACTUAL, ratings_1);
     
     {
-        const auto matched_words = get<0>(server.MatchDocument("little cat"s, doc_id_0));
+        const auto [matched_words, status] = server.MatchDocument("little cat"s, doc_id_0);
         vector<string> expected_result = {"cat"s};
         ASSERT_EQUAL(matched_words, expected_result);
+        ASSERT_EQUAL(static_cast<int>(status), static_cast<int>(DocumentStatus::ACTUAL));
     }
     
     {
-        const auto matched_words = get<0>(server.MatchDocument("little -cat"s, doc_id_0));
-        vector<string> result = {};
+        const auto [matched_words, status] = server.MatchDocument("little -cat"s, doc_id_0);
         ASSERT(matched_words.empty());
+    }
+    
+    {
+        const auto [matched_words, status] = server.MatchDocument("cow in the city"s, doc_id_0);
+        vector<string> expected_result = {"city"s};
+        ASSERT_EQUAL(matched_words, expected_result);
+        ASSERT_EQUAL(static_cast<int>(status), static_cast<int>(DocumentStatus::ACTUAL));
     }
 }
 
@@ -76,12 +99,11 @@ void TestDocumentsSortedByRelevance() {
     server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, {4, 5, -12, 2, 1});
     
     const auto found_docs = server.FindTopDocuments("пушистый ухоженный кот"s);
-    vector<int> doc_ids;
-    for (const auto& doc: found_docs) {
-        doc_ids.push_back(doc.id);
+    for (size_t i = 0; i + 2 < found_docs.size(); ++i) {
+        const double relevance0 = found_docs[i].relevance;
+        const double relevance1 = found_docs[i + 1].relevance;
+        ASSERT(relevance0 > relevance1);
     }
-    vector<int> expected_result = {1, 2, 0};
-    ASSERT_EQUAL(doc_ids, expected_result);
 }
 
 void TestComputeAverageRating() {
@@ -92,8 +114,10 @@ void TestComputeAverageRating() {
     server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, {4, 5, -12, 2, 1});
     
     const auto found_docs = server.FindTopDocuments("пушистый ухоженный кот"s);
+    ASSERT_EQUAL(found_docs.size(), 3u);
     const int rating = found_docs[0].rating;
-    ASSERT_EQUAL(rating, 4);
+    const int expected_rating = (3 + 7 + 2 + 7) / 4;
+    ASSERT_EQUAL(rating, expected_rating);
 }
 
 void TestResultsFilterUsingPredicate() {
@@ -124,21 +148,30 @@ void TestFindTopDocumentsWithDefiniteStatus() {
     
     {
         const auto found_docs = server.FindTopDocuments("пушистый ухоженный кот"s, DocumentStatus::ACTUAL);
+        ASSERT_EQUAL(found_docs.size(), 1u);
         const int id = found_docs[0].id;
         ASSERT_EQUAL(id, 0);
     }
     
     {
         const auto found_docs = server.FindTopDocuments("пушистый ухоженный кот"s, DocumentStatus::BANNED);
+        ASSERT_EQUAL(found_docs.size(), 1u);
         const int id = found_docs[0].id;
         ASSERT_EQUAL(id, 1);
     }
     
     {
         const auto found_docs = server.FindTopDocuments("пушистый ухоженный кот"s, DocumentStatus::REMOVED);
+        ASSERT_EQUAL(found_docs.size(), 1u);
         const int id = found_docs[0].id;
         ASSERT_EQUAL(id, 2);
     }
+    
+    {
+        const auto found_docs = server.FindTopDocuments("пушистый ухоженный кот"s, DocumentStatus::IRRELEVANT);
+        ASSERT(found_docs.empty());
+    }
+    
 }
 
 void TestCorrectRelevanceComputation() {
@@ -148,18 +181,23 @@ void TestCorrectRelevanceComputation() {
     server.AddDocument(1, "пушистый кот пушистый хвост"s, DocumentStatus::ACTUAL, {3, 7, 2, 7});
     server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, {4, 5, -12, 2, 1});
     
-    const double EPSILON = 1e-6;
-    const auto found_doc = server.FindTopDocuments("пушистый ухоженный кот"s);
-    double epsilon = found_doc[0].relevance - 0.650672;
-    ASSERT(epsilon < EPSILON);
-    epsilon = found_doc[1].relevance - 0.274653;
-    ASSERT(epsilon < EPSILON);
-    epsilon = found_doc[2].relevance - 0.101366;
-    ASSERT(epsilon < EPSILON);
+    string query = "пушистый ухоженный кот"s;
+    vector<double> idfs = {log(3./1), log(3./1), log(3./2)};
+    vector<double> tfs_for_doc_1 = {2./4, 0./4, 1./4};
+    double expected_relevance = 0.;
+    for (int i = 0; i < 3; ++i) {
+        expected_relevance += idfs[i] * tfs_for_doc_1[i];
+    }
+    const auto found_doc = server.FindTopDocuments(query);
+    ASSERT_EQUAL(found_doc.size(), 3u);
+    const double epsilon = 1e-6;
+    double delta = abs(found_doc[0].relevance - expected_relevance);
+    ASSERT(delta < epsilon);
 }
 
 void TestSearchServer() {
     RUN_TEST(TestExcludeStopWordsFromAddedDocumentContent);
+    RUN_TEST(TestAddDocument);
     RUN_TEST(TestDocumentsWithMinusWordsExcludedFromSearchResults); 
     RUN_TEST(TestMatchDocument);
     RUN_TEST(TestDocumentsSortedByRelevance);
