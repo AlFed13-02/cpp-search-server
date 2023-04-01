@@ -99,9 +99,9 @@ void TestDocumentsSortedByRelevance() {
     server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, {4, 5, -12, 2, 1});
     
     const auto found_docs = server.FindTopDocuments("пушистый ухоженный кот"s);
-    for (size_t i = 0; i + 2 < found_docs.size(); ++i) {
-        const double relevance0 = found_docs[i].relevance;
-        const double relevance1 = found_docs[i + 1].relevance;
+    for (size_t i = 1; i < found_docs.size(); ++i) {
+        const double relevance0 = found_docs[i - 1].relevance;
+        const double relevance1 = found_docs[i].relevance;
         ASSERT(relevance0 > relevance1);
     }
 }
@@ -109,12 +109,10 @@ void TestDocumentsSortedByRelevance() {
 void TestComputeAverageRating() {
     SearchServer server;
     server.SetStopWords("и в на"s);
-    server.AddDocument(0, "белый кот и модный ошейник"s, DocumentStatus::ACTUAL, {2, 8, -3});
     server.AddDocument(1, "пушистый кот пушистый хвост"s, DocumentStatus::ACTUAL, {3, 7, 2, 7});
-    server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, {4, 5, -12, 2, 1});
     
     const auto found_docs = server.FindTopDocuments("пушистый ухоженный кот"s);
-    ASSERT_EQUAL(found_docs.size(), 3u);
+    ASSERT_EQUAL(found_docs.size(), 1u);
     const int rating = found_docs[0].rating;
     const int expected_rating = (3 + 7 + 2 + 7) / 4;
     ASSERT_EQUAL(rating, expected_rating);
@@ -182,8 +180,8 @@ void TestCorrectRelevanceComputation() {
     server.AddDocument(2, "ухоженный пёс выразительные глаза"s, DocumentStatus::ACTUAL, {4, 5, -12, 2, 1});
     
     string query = "пушистый ухоженный кот"s;
-    vector<double> idfs = {log(3./1), log(3./1), log(3./2)};
-    vector<double> tfs_for_doc_1 = {2./4, 0./4, 1./4};
+    vector<double> idfs = {log(3. / 1), log(3. / 1), log(3. / 2)};
+    vector<double> tfs_for_doc_1 = {2. / 4, 0. / 4, 1. / 4};
     double expected_relevance = 0.;
     for (int i = 0; i < 3; ++i) {
         expected_relevance += idfs[i] * tfs_for_doc_1[i];
