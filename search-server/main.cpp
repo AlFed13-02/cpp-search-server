@@ -239,6 +239,9 @@ private:
         if (text[0] == '-') {
             is_minus = true;
             text = text.substr(1);
+            if (text.empty() || text[0] == '-' ) {
+                        throw invalid_argument("Invalid minus word format"s);
+                    }
         }
         return {text, is_minus, IsStopWord(text)};
     }
@@ -258,9 +261,6 @@ private:
             const QueryWord query_word = ParseQueryWord(word);
             if (!query_word.is_stop) {
                 if (query_word.is_minus) {
-                    if (query_word.data[0] == '-' || query_word.data.empty()) {
-                        throw invalid_argument("Invalid minus word format"s);
-                    }
                     query.minus_words.insert(query_word.data);
                 } else {
                     query.plus_words.insert(query_word.data);
