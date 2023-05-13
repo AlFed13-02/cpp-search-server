@@ -14,17 +14,10 @@
 
 const int MAX_RESULT_DOCUMENT_COUNT = 5;
 
-enum class DocumentStatus {
-    ACTUAL,
-    IRRELEVANT,
-    BANNED,
-    REMOVED,
-};
-
 class SearchServer {
 public:
     template <typename StringContainer>
-    explicit SearchServer(const StringContainer& stop_words)
+    SearchServer(const StringContainer& stop_words)
         : stop_words_(MakeUniqueNonEmptyStrings(stop_words))  
     {
         if (!all_of(stop_words_.begin(), stop_words_.end(), IsValidWord)) {
@@ -36,26 +29,7 @@ public:
 
     template <typename DocumentPredicate>
     std::vector<Document> FindTopDocuments(const std::string& raw_query,
-                                      DocumentPredicate document_predicate) const {
-        const auto query = ParseQuery(raw_query);
-
-        auto matched_documents = FindAllDocuments(query, document_predicate);
-
-        sort(matched_documents.begin(), matched_documents.end(),
-             [](const Document& lhs, const Document& rhs) {
-                 if (std::abs(lhs.relevance - rhs.relevance) < 1e-6) {
-                     return lhs.rating > rhs.rating;
-                 } else {
-                     return lhs.relevance > rhs.relevance;
-                 }
-             });
-        if (matched_documents.size() > MAX_RESULT_DOCUMENT_COUNT) {
-            matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);
-        }
-
-        return matched_documents;
-    }
-    
+                                      DocumentPredicate document_predicate) const;
     void AddDocument(int document_id, const std::string& document, DocumentStatus status,
                      const std::vector<int>& ratings);
     std::vector<Document> FindTopDocuments(const std::string& raw_query, DocumentStatus status) const;
@@ -75,29 +49,53 @@ private:
     std::map<int, DocumentData> documents_;
     std::vector<int> document_ids_;
 
-    bool IsStopWord(const std::string& word) const;
-    static bool IsValidWord(const std::string& word);
-    std::vector<std::string> SplitIntoWordsNoStop(const std::string& text) const;
-    static int ComputeAverageRating(const std::vector<int>& ratings);
-
     struct QueryWord {
         std::string data;
         bool is_minus;
         bool is_stop;
     };
 
-    QueryWord ParseQueryWord(const std::string& text) const;
-
     struct Query {
         std::set<std::string> plus_words;
         std::set<std::string> minus_words;
     };
 
+    bool IsStopWord(const std::string& word) const;
+    static bool IsValidWord(const std::string& word);
+    std::vector<std::string> SplitIntoWordsNoStop(const std::string& text) const;
+    static int ComputeAverageRating(const std::vector<int>& ratings);
+    QueryWord ParseQueryWord(const std::string& text) const;
     Query ParseQuery(const std::string& text) const;
     double ComputeWordInverseDocumentFreq(const std::string& word) const;
-
     template <typename DocumentPredicate>
     std::vector<Document> FindAllDocuments(const Query& query,
+                                      DocumentPredicate document_predicate) const;
+};
+
+template <typename DocumentPredicate>
+    std::vector<Document> SearchServer::FindTopDocuments(const std::string& raw_query,
+                                      DocumentPredicate document_predicate) const {
+        const auto query = ParseQuery(raw_query);
+
+        auto matched_documents = FindAllDocuments(query, document_predicate);
+
+        sort(matched_documents.begin(), matched_documents.end(),
+             [](const Document& lhs, const Document& rhs) {
+                 if (std::abs(lhs.relevance - rhs.relevance) < 1e-6) {
+                     return lhs.rating > rhs.rating;
+                 } else {
+                     return lhs.relevance > rhs.relevance;
+                 }
+             });
+        if (matched_documents.size() > MAX_RESULT_DOCUMENT_COUNT) {
+            matched_documents.resize(MAX_RESULT_DOCUMENT_COUNT);
+        }
+
+        return matched_documents;
+    }
+
+    template <typename DocumentPredicate>
+    std::vector<Document> SearchServer::FindAllDocuments(const SearchServer::Query& query,
                                       DocumentPredicate document_predicate) const {
         std::map<int, double> document_to_relevance;
         for (const std::string& word : query.plus_words) {
@@ -129,4 +127,3 @@ private:
         }
         return matched_documents;
     }
-};
