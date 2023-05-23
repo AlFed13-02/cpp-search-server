@@ -8,22 +8,18 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <string>
 
 #include "document.h"
 #include "string_processing.h"
+#include "log_duration.h"
 
 const int MAX_RESULT_DOCUMENT_COUNT = 5;
 
 class SearchServer {
 public:
     template <typename StringContainer>
-    SearchServer(const StringContainer& stop_words)
-        : stop_words_(MakeUniqueNonEmptyStrings(stop_words))  
-    {
-        if (!all_of(stop_words_.begin(), stop_words_.end(), IsValidWord)) {
-            throw std::invalid_argument("Some of stop words are invalid");
-        }
-    }
+    explicit SearchServer(const StringContainer& stop_words);
 
     explicit SearchServer(const std::string& stop_words_text);
 
@@ -32,10 +28,13 @@ public:
                                       DocumentPredicate document_predicate) const;
     void AddDocument(int document_id, const std::string& document, DocumentStatus status,
                      const std::vector<int>& ratings);
+    void RemoveDocument(int document_id);
     std::vector<Document> FindTopDocuments(const std::string& raw_query, DocumentStatus status) const;
     std::vector<Document> FindTopDocuments(const std::string& raw_query) const;
+    const std::map<std::string, double>& GetWordFrequencies(int document_id) const;
     int GetDocumentCount() const;
-    int GetDocumentId(int index) const;
+    std::set<int>::const_iterator begin() const;
+    std::set<int>::const_iterator end() const;
     std::tuple<std::vector<std::string>, DocumentStatus> MatchDocument(const std::string& raw_query,
                                                         int document_id) const;
     
@@ -45,9 +44,10 @@ private:
         DocumentStatus status;
     };
     const std::set<std::string> stop_words_;
+    std::map<int , std::map<std::string, double>> document_to_word_freqs_;
     std::map<std::string, std::map<int, double>> word_to_document_freqs_;
     std::map<int, DocumentData> documents_;
-    std::vector<int> document_ids_;
+    std::set<int> document_ids_;
 
     struct QueryWord {
         std::string data;
@@ -72,9 +72,19 @@ private:
                                       DocumentPredicate document_predicate) const;
 };
 
+template <typename StringContainer>
+SearchServer::SearchServer(const StringContainer& stop_words)
+        : stop_words_(MakeUniqueNonEmptyStrings(stop_words))  
+{
+    if (!all_of(stop_words_.begin(), stop_words_.end(), IsValidWord)) {
+    throw std::invalid_argument("Some of stop words are invalid");
+    }
+}
+
 template <typename DocumentPredicate>
     std::vector<Document> SearchServer::FindTopDocuments(const std::string& raw_query,
                                       DocumentPredicate document_predicate) const {
+        using namespace std;
         const auto query = ParseQuery(raw_query);
 
         auto matched_documents = FindAllDocuments(query, document_predicate);

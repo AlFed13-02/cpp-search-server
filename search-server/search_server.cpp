@@ -7,8 +7,10 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <iterator>
 
 #include "search_server.h"
+#include "log_duration.h"
 
 using namespace std;
 
@@ -28,9 +30,19 @@ void SearchServer::AddDocument(int document_id, const string& document, Document
     const double inv_word_count = 1.0 / words.size();
     for (const string& word : words) {
         word_to_document_freqs_[word][document_id] += inv_word_count;
+        document_to_word_freqs_[document_id][word] += inv_word_count;
     }
     documents_.emplace(document_id, DocumentData{ComputeAverageRating(ratings), status});
-    document_ids_.push_back(document_id);
+    document_ids_.insert(document_id);
+}
+
+void SearchServer::RemoveDocument(int document_id) {
+    for (auto& [word, freq]: document_to_word_freqs_[document_id]) {
+        word_to_document_freqs_[word].erase(document_id);
+    }
+    document_to_word_freqs_.erase(document_id);
+    documents_.erase(document_id);
+    document_ids_.erase(document_id);
 }
 
 vector<Document> SearchServer::FindTopDocuments(const string& raw_query, DocumentStatus status) const {
@@ -44,16 +56,30 @@ vector<Document> SearchServer::FindTopDocuments(const string& raw_query) const {
     return FindTopDocuments(raw_query, DocumentStatus::ACTUAL);
 }
 
+const map<string, double>& SearchServer::GetWordFrequencies(int document_id) const {
+    static map<string, double> empty;
+    if (document_to_word_freqs_.count(document_id) == 0) {
+        return empty;
+    } else {
+        return document_to_word_freqs_.at(document_id);
+    }
+}
+
 int SearchServer::GetDocumentCount() const {
     return documents_.size();
 }
 
-int SearchServer::GetDocumentId(int index) const {
-    return document_ids_.at(index);
+set<int>::const_iterator SearchServer::begin() const {
+    return document_ids_.begin();
+}
+
+set<int>::const_iterator SearchServer::end() const {
+    return document_ids_.end();
 }
 
 tuple<vector<string>, DocumentStatus> SearchServer::MatchDocument(const string& raw_query,
                                                                   int document_id) const {
+    using namespace std;                                                                
     const auto query = ParseQuery(raw_query);
 
     vector<string> matched_words;
