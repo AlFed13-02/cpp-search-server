@@ -79,7 +79,7 @@ void TestMatchDocument() {
     
     {
         const auto [matched_words, status] = server.MatchDocument("little cat"s, doc_id_0);
-        vector<string> expected_result = {"cat"s};
+        vector<string_view> expected_result = {"cat"sv};
         ASSERT_EQUAL(matched_words, expected_result);
         ASSERT_EQUAL(static_cast<int>(status), static_cast<int>(DocumentStatus::ACTUAL));
     }
@@ -91,7 +91,7 @@ void TestMatchDocument() {
     
     {
         const auto [matched_words, status] = server.MatchDocument("cow in the city"s, doc_id_0);
-        vector<string> expected_result = {"city"s};
+        vector<string_view> expected_result = {"city"sv};
         ASSERT_EQUAL(matched_words, expected_result);
         ASSERT_EQUAL(static_cast<int>(status), static_cast<int>(DocumentStatus::ACTUAL));
     }

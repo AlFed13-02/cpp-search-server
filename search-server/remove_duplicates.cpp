@@ -9,11 +9,11 @@
 using namespace std;
 
 void RemoveDuplicates(SearchServer& search_server) {
-    set<set<string>> document_word_sets;
+    set<set<string_view>> document_word_sets;
     vector<int> marked_for_deletion;
     for (int id: search_server) {
         auto word_freqs_in_document = search_server.GetWordFrequencies(id);
-        set<string> document_word_set;
+        set<string_view> document_word_set;
         for (auto& [word, freq]: word_freqs_in_document) {
             document_word_set.insert(word);
         }

@@ -1,5 +1,6 @@
 #include <vector>
 #include <string>
+#include <cstdint>
 
 #include "string_processing.h"
 
@@ -24,3 +25,16 @@ vector<string> SplitIntoWords(const string& text) {
 
     return words;
 }
+
+vector<string_view> SplitIntoWordsView(string_view str) {
+    vector<string_view> result;
+    int64_t pos = str.find_first_not_of(" ");
+    const int64_t pos_end = str.npos;
+    while (pos != pos_end) {
+        int64_t space = str.find(' ', pos);
+        result.push_back(space == pos_end ? str.substr(pos) : str.substr(pos, space - pos));
+        pos = str.find_first_not_of(" ", space);
+    }
+
+    return result;
+} 
